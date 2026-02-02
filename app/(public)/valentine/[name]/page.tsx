@@ -3,9 +3,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Heart } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Heart, Pencil, Save, X, ArrowLeft } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
+import { getInvite, createInvite, updateInvite } from "@/app/actions";
+import { useSession } from "@/lib/auth-client";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function ValentinePage({
     params,
@@ -19,6 +24,12 @@ export default function ValentinePage({
     const [isEscaping, setIsEscaping] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const noButtonRef = useRef<HTMLButtonElement>(null);
+    const { data: session } = useSession();
+    const router = useRouter();
+    const [inviteData, setInviteData] = useState<any>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [originalName, setOriginalName] = useState("");
+    const [originalMessage, setOriginalMessage] = useState<string | null>(null);
 
     // Motion values for smooth animation
     const x = useMotionValue(0);
@@ -26,13 +37,48 @@ export default function ValentinePage({
     const springX = useSpring(x, { stiffness: 300, damping: 20 });
     const springY = useSpring(y, { stiffness: 300, damping: 20 });
 
+    const [customMessage, setCustomMessage] = useState<string | null>(null);
+
+    const searchParams = useSearchParams();
+
     useEffect(() => {
-        params.then((resolvedParams) => {
-            const decodedName =
-                decodeURIComponent(resolvedParams.name).charAt(0).toUpperCase() +
-                decodeURIComponent(resolvedParams.name).slice(1).toLowerCase();
-            setName(decodedName);
-        });
+        if (searchParams.get("edit") === "true") {
+            setIsEditing(true);
+        }
+    }, [searchParams]);
+
+    useEffect(() => {
+        // Attempt to fetch invite by slug (name)
+        const fetchInvite = async () => {
+            const resolvedParams = await params;
+            const slugOrName = decodeURIComponent(resolvedParams.name);
+
+            try {
+                const invite = await getInvite(slugOrName);
+
+                if (invite) {
+                    setInviteData(invite);
+                    setName(invite.recipientName);
+                    setOriginalName(invite.recipientName);
+                    if (invite.message) {
+                        setCustomMessage(invite.message);
+                        setOriginalMessage(invite.message);
+                    }
+                } else {
+                    // Fallback: It's just a name
+                    const cleanName = slugOrName.charAt(0).toUpperCase() + slugOrName.slice(1).toLowerCase();
+                    setName(cleanName);
+                    setOriginalName(cleanName);
+                }
+            } catch (e) {
+                // Fallback if fetch fails (e.g. rate limit or network)
+                const resolvedParams = await params;
+                const decodedName = decodeURIComponent(resolvedParams.name).charAt(0).toUpperCase() + decodeURIComponent(resolvedParams.name).slice(1).toLowerCase();
+                setName(decodedName);
+                setOriginalName(decodedName);
+            }
+        };
+        fetchInvite();
     }, [params]);
 
     const moveAwayFromMouse = useCallback((mouseX: number, mouseY: number) => {
@@ -95,9 +141,95 @@ export default function ValentinePage({
         setIsEscaping(true);
     }, [x, y]);
 
+    // Reset button position when mouse is far away
+    useEffect(() => {
+        if (!isEscaping) return;
+
+        const handleGlobalMouseMove = (e: MouseEvent) => {
+            if (!noButtonRef.current) return;
+
+            const rect = noButtonRef.current.getBoundingClientRect();
+            const buttonCenterX = rect.left + rect.width / 2;
+            const buttonCenterY = rect.top + rect.height / 2;
+
+            const distance = Math.sqrt(
+                Math.pow(e.clientX - buttonCenterX, 2) +
+                Math.pow(e.clientY - buttonCenterY, 2)
+            );
+
+            // If mouse is more than 300px away, return button to original position
+            if (distance > 300) {
+                x.set(0);
+                y.set(0);
+            }
+        };
+
+        window.addEventListener("mousemove", handleGlobalMouseMove);
+        return () => window.removeEventListener("mousemove", handleGlobalMouseMove);
+    }, [isEscaping, x, y]);
+
+    // Cleanup escape message after button is home for a while
+    useEffect(() => {
+        if (!isEscaping) return;
+
+        // Use an interval to check if button has returned to center
+        const interval = setInterval(() => {
+            if (x.get() === 0 && y.get() === 0) {
+                const timeout = setTimeout(() => setIsEscaping(false), 3000);
+                clearInterval(interval);
+                return () => clearTimeout(timeout);
+            }
+        }, 500);
+
+        return () => clearInterval(interval);
+    }, [isEscaping, x, y]);
+
     const handleMouseEnter = (e: React.MouseEvent) => {
         moveAwayFromMouse(e.clientX, e.clientY);
     };
+
+    const toggleEdit = () => {
+        if (!session) {
+            router.push("/login");
+            return;
+        }
+        if (isEditing) {
+            // Cancel -> Revert
+            setName(originalName);
+            setCustomMessage(originalMessage);
+            setIsEditing(false);
+        } else {
+            // Start editing
+            setIsEditing(true);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!name.trim()) return;
+
+        try {
+            // If owner -> Update
+            if (inviteData && session?.user?.id === inviteData.userId) {
+                const res = await updateInvite(inviteData.id, { recipientName: name, message: customMessage || undefined });
+                if (res.success) {
+                    setOriginalName(name);
+                    setOriginalMessage(customMessage);
+                    setInviteData({ ...inviteData, recipientName: name, message: customMessage }); // Optimistic update
+                    setIsEditing(false);
+                }
+            }
+            // If not owner -> Create New
+            else {
+                const res = await createInvite({ recipientName: name, message: customMessage || undefined });
+                if (res.success && res.slug) {
+                    router.push(`/valentine/${res.slug}`);
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Failed to save. Please make sure you are logged in.");
+        }
+    }
 
     const handleYesClick = () => {
         setYesClicked(true);
@@ -375,8 +507,16 @@ export default function ValentinePage({
                     initial={{ scale: 0, rotate: -180 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                    className="w-full max-w-3xl mx-auto"
                 >
-                    <Card className="relative z-10 bg-white/90 backdrop-blur-lg shadow-2xl border-0 max-w-3xl w-full mx-4">
+                    <Card className="relative z-10 bg-white/90 backdrop-blur-lg shadow-2xl border-0 w-full overflow-hidden">
+                        <button
+                            onClick={() => setYesClicked(false)}
+                            className="absolute top-6 left-6 z-20 text-gray-400 hover:text-pink-500 transition-colors p-2 rounded-full hover:bg-pink-50"
+                            title="Go back"
+                        >
+                            <ArrowLeft size={24} />
+                        </button>
                         <CardContent className="p-10 md:p-14 text-center">
                             <motion.div
                                 className="mb-6"
@@ -423,7 +563,7 @@ export default function ValentinePage({
     return (
         <div
             ref={containerRef}
-            className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500 overflow-hidden relative"
+            className="fixed inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500 overflow-hidden"
         >
             {/* Floating hearts background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -456,10 +596,22 @@ export default function ValentinePage({
                 ))}
             </div>
 
-            <Card className="relative z-10 bg-white/90 backdrop-blur-lg shadow-2xl border-0 max-w-3xl w-full mx-4">
+            <Card className="relative z-10 bg-white/90 backdrop-blur-lg shadow-2xl border-0 max-w-3xl w-full mx-auto">
+                <div className="absolute top-4 right-4 z-50 flex gap-2">
+                    {isEditing ? (
+                        <>
+                            <Button size="sm" onClick={handleSave} className="bg-green-500 hover:bg-green-600 text-white rounded-full px-4">
+                                <Save className="w-4 h-4 mr-1" /> Save
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={toggleEdit} className="text-gray-500 hover:text-red-500 rounded-full px-4">
+                                <X className="w-4 h-4 mr-1" /> Cancel
+                            </Button>
+                        </>
+                    ) : null}
+                </div>
                 <CardContent className="p-10 md:p-14 text-center">
                     {/* Animated teddy bear */}
-                    <div className="mb-8 w-40 h-40 md:w-52 md:h-52 mx-auto">
+                    <div className="mb-4 w-32 h-32 md:w-40 md:h-40 mx-auto">
                         <DotLottieReact
                             src="/media/Teddy Bear.lottie"
                             loop
@@ -469,25 +621,54 @@ export default function ValentinePage({
                     </div>
 
                     {/* Main question */}
-                    <h1
-                        className="text-4xl md:text-5xl lg:text-6xl text-red-500 mb-10"
-                        style={{ fontFamily: "'MGF Pinlock', cursive" }}
-                    >
-                        {name}, will you be my Valentine?
-                    </h1>
+                    {isEditing ? (
+                        <div className="mb-4">
+                            <label className="text-xs text-pink-400 mb-1 block uppercase tracking-wider font-semibold">Recipient Name</label>
+                            <Input
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="text-2xl md:text-3xl text-center font-bold text-red-500 h-12 border-pink-300 focus-visible:ring-pink-500 font-serif bg-white/50"
+                            />
+                        </div>
+                    ) : (
+                        <h1
+                            className="text-3xl md:text-4xl lg:text-5xl text-red-500 mb-4"
+                            style={{ fontFamily: "'MGF Pinlock', cursive" }}
+                        >
+                            {name}, will you be my Valentine?
+                        </h1>
+                    )}
+
+                    {(isEditing || customMessage) && (
+                        isEditing ? (
+                            <div className="mb-4">
+                                <label className="text-xs text-pink-400 mb-1 block uppercase tracking-wider font-semibold">Custom Message</label>
+                                <Textarea
+                                    value={customMessage || ""}
+                                    onChange={(e) => setCustomMessage(e.target.value)}
+                                    placeholder="Add a sweet personal note..."
+                                    className="text-base text-gray-600 italic min-h-[80px] border-pink-300 focus-visible:ring-pink-500 bg-white/50"
+                                />
+                            </div>
+                        ) : (
+                            <p className="text-lg text-gray-600 mb-4 italic max-w-lg mx-auto">
+                                &ldquo;{customMessage}&rdquo;
+                            </p>
+                        )
+                    )}
 
                     {/* Buttons container */}
-                    <div className="flex justify-center gap-6 relative min-h-[80px]">
+                    <div className="flex justify-center gap-4 relative min-h-[60px]">
                         <Button
                             onClick={handleYesClick}
-                            className="bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white font-bold py-4 px-10 text-xl md:text-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 h-auto"
+                            className="bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white font-bold py-3 px-8 text-lg md:text-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 h-auto"
                         >
                             Yes! 💖
                         </Button>
 
                         <motion.div
                             style={{ x: springX, y: springY }}
-                            className="relative"
+                            className="relative z-50"
                         >
                             <Button
                                 ref={noButtonRef}
@@ -501,7 +682,7 @@ export default function ValentinePage({
                                     e.preventDefault();
                                     moveAwayFromMouse(e.clientX, e.clientY);
                                 }}
-                                className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-4 px-10 text-xl md:text-2xl shadow-md h-auto"
+                                className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-8 text-lg md:text-xl shadow-md h-auto"
                             >
                                 No 😢
                             </Button>
@@ -509,8 +690,9 @@ export default function ValentinePage({
 
                         <Button
                             onClick={handleWhyClick}
+                            onMouseEnter={() => setIsEscaping(true)}
                             variant="secondary"
-                            className="bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-4 px-10 text-xl md:text-2xl shadow-md h-auto border-2 border-pink-300"
+                            className="bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-3 px-8 text-lg md:text-xl shadow-md h-auto border-2 border-pink-300"
                         >
                             Why? 🤔
                         </Button>
