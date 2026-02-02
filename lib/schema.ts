@@ -58,7 +58,9 @@ export const invite = pgTable("invite", {
     slug: text("slug").unique(), // Optional custom slug
     recipientName: text("recipientName").notNull(),
     message: text("message"), // Custom message
-    theme: text("theme").default("default"),
+    reason1: text("reason1"), // Custom first reason
+    reason2: text("reason2"), // Custom second reason
+    theme: text("theme").default("pink"),
 	createdAt: timestamp("createdAt").notNull().defaultNow(),
 	updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });

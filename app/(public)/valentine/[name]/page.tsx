@@ -11,8 +11,9 @@ import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import { getInvite, createInvite, updateInvite } from "@/app/actions";
 import { useSession } from "@/lib/auth-client";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-export default function ValentinePage({
+function ValentineContent({
     params,
 }: {
     params: Promise<{ name: string }>;
@@ -28,8 +29,14 @@ export default function ValentinePage({
     const router = useRouter();
     const [inviteData, setInviteData] = useState<any>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [why1, setWhy1] = useState<string | null>(null);
+    const [why2, setWhy2] = useState<string | null>(null);
+    const [theme, setTheme] = useState("pink");
     const [originalName, setOriginalName] = useState("");
     const [originalMessage, setOriginalMessage] = useState<string | null>(null);
+    const [originalWhy1, setOriginalWhy1] = useState<string | null>(null);
+    const [originalWhy2, setOriginalWhy2] = useState<string | null>(null);
+    const [originalTheme, setOriginalTheme] = useState("pink");
 
     // Motion values for smooth animation
     const x = useMotionValue(0);
@@ -63,6 +70,18 @@ export default function ValentinePage({
                     if (invite.message) {
                         setCustomMessage(invite.message);
                         setOriginalMessage(invite.message);
+                    }
+                    if (invite.reason1) {
+                        setWhy1(invite.reason1);
+                        setOriginalWhy1(invite.reason1);
+                    }
+                    if (invite.reason2) {
+                        setWhy2(invite.reason2);
+                        setOriginalWhy2(invite.reason2);
+                    }
+                    if (invite.theme) {
+                        setTheme(invite.theme);
+                        setOriginalTheme(invite.theme);
                     }
                 } else {
                     // Fallback: It's just a name
@@ -141,6 +160,45 @@ export default function ValentinePage({
         setIsEscaping(true);
     }, [x, y]);
 
+    const getThemeStyles = () => {
+        switch (theme) {
+            case "ocean":
+                return {
+                    bg: "from-cyan-400 via-blue-500 to-indigo-600",
+                    text: "text-blue-600",
+                    btn: "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700",
+                    secondaryBtn: "bg-blue-100 hover:bg-blue-200 text-blue-700 border-blue-300",
+                    accent: "text-blue-500"
+                };
+            case "purple":
+                return {
+                    bg: "from-purple-500 via-indigo-500 to-violet-600",
+                    text: "text-purple-600",
+                    btn: "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700",
+                    secondaryBtn: "bg-purple-100 hover:bg-purple-200 text-purple-700 border-purple-300",
+                    accent: "text-purple-500"
+                };
+            case "dark":
+                return {
+                    bg: "from-slate-900 via-red-950 to-black",
+                    text: "text-red-500",
+                    btn: "bg-gradient-to-r from-red-700 to-red-900 hover:from-red-800 hover:to-black",
+                    secondaryBtn: "bg-slate-800 hover:bg-slate-700 text-red-400 border-red-900",
+                    accent: "text-red-600"
+                };
+            default:
+                return {
+                    bg: "from-pink-400 via-red-400 to-rose-500",
+                    text: "text-red-500",
+                    btn: "bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600",
+                    secondaryBtn: "bg-pink-100 hover:bg-pink-200 text-pink-700 border-pink-300",
+                    accent: "text-pink-500"
+                };
+        }
+    };
+
+    const styles = getThemeStyles();
+
     // Reset button position when mouse is far away
     useEffect(() => {
         if (!isEscaping) return;
@@ -197,6 +255,9 @@ export default function ValentinePage({
             // Cancel -> Revert
             setName(originalName);
             setCustomMessage(originalMessage);
+            setWhy1(originalWhy1);
+            setWhy2(originalWhy2);
+            setTheme(originalTheme);
             setIsEditing(false);
         } else {
             // Start editing
@@ -210,17 +271,39 @@ export default function ValentinePage({
         try {
             // If owner -> Update
             if (inviteData && session?.user?.id === inviteData.userId) {
-                const res = await updateInvite(inviteData.id, { recipientName: name, message: customMessage || undefined });
+                const res = await updateInvite(inviteData.id, {
+                    recipientName: name,
+                    message: customMessage || undefined,
+                    reason1: why1 || undefined,
+                    reason2: why2 || undefined,
+                    theme: theme
+                });
                 if (res.success) {
                     setOriginalName(name);
                     setOriginalMessage(customMessage);
-                    setInviteData({ ...inviteData, recipientName: name, message: customMessage }); // Optimistic update
+                    setOriginalWhy1(why1);
+                    setOriginalWhy2(why2);
+                    setOriginalTheme(theme);
+                    setInviteData({
+                        ...inviteData,
+                        recipientName: name,
+                        message: customMessage,
+                        reason1: why1,
+                        reason2: why2,
+                        theme: theme
+                    }); // Optimistic update
                     setIsEditing(false);
                 }
             }
             // If not owner -> Create New
             else {
-                const res = await createInvite({ recipientName: name, message: customMessage || undefined });
+                const res = await createInvite({
+                    recipientName: name,
+                    message: customMessage || undefined,
+                    reason1: why1 || undefined,
+                    reason2: why2 || undefined,
+                    theme: theme
+                });
                 if (res.success && res.slug) {
                     router.push(`/valentine/${res.slug}`);
                 }
@@ -241,7 +324,7 @@ export default function ValentinePage({
 
     if (!name) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500">
+            <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br ${styles.bg}`}>
                 <div className="animate-pulse">
                     <Heart className="w-16 h-16 text-white" />
                 </div>
@@ -251,7 +334,7 @@ export default function ValentinePage({
 
     if (whyClicked && !familyClicked) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500 overflow-hidden p-4">
+            <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br ${styles.bg} overflow-hidden p-4`}>
                 {/* Floating hearts background */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     {[...Array(15)].map((_, i) => (
@@ -296,7 +379,7 @@ export default function ValentinePage({
                                 className="text-xl md:text-2xl text-gray-700 mb-6"
                                 initial={{ opacity: 0, y: -20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.3 }}
+                                transition={{ delay: 0.1 }}
                             >
                                 Really? Ok, here... open my heart 💝
                             </motion.p>
@@ -304,7 +387,7 @@ export default function ValentinePage({
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.8, duration: 0.5 }}
+                                transition={{ delay: 0.2, duration: 0.5 }}
                                 className="mb-6"
                             >
                                 <DotLottieReact
@@ -316,31 +399,31 @@ export default function ValentinePage({
                             </motion.div>
 
                             <motion.h2
-                                className="text-3xl md:text-4xl lg:text-5xl text-red-500 mb-6"
+                                className={`text-3xl md:text-4xl lg:text-5xl mb-6 ${styles.text}`}
                                 style={{ fontFamily: "'MGF Pinlock', cursive" }}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 1.5 }}
+                                transition={{ delay: 0.4 }}
                             >
-                                Because I&apos;m blind in your love... 💕
+                                {why1 || "Because I'm blind in your love... 💕"}
                             </motion.h2>
 
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                transition={{ delay: 2 }}
+                                transition={{ delay: 0.6 }}
                                 className="flex flex-col md:flex-row gap-4 justify-center items-center"
                             >
                                 <Button
                                     onClick={() => setWhyClicked(false)}
-                                    className="bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white font-bold py-3 px-8 text-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 h-auto"
+                                    className={`${styles.btn} text-white font-bold py-3 px-8 text-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 h-auto`}
                                 >
                                     Aww, go back 🥰
                                 </Button>
                                 <Button
                                     onClick={() => setFamilyClicked(true)}
                                     variant="secondary"
-                                    className="bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-3 px-8 text-lg shadow-md h-auto border-2 border-pink-300"
+                                    className={`${styles.secondaryBtn} font-bold py-3 px-8 text-lg shadow-md h-auto border-2`}
                                 >
                                     Want more reason? 💭
                                 </Button>
@@ -354,7 +437,7 @@ export default function ValentinePage({
 
     if (familyClicked) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500 overflow-hidden p-4">
+            <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br ${styles.bg} overflow-hidden p-4`}>
                 {/* Floating hearts background */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     {[...Array(15)].map((_, i) => (
@@ -399,7 +482,7 @@ export default function ValentinePage({
                                 className="text-xl md:text-2xl text-gray-700 mb-6"
                                 initial={{ opacity: 0, y: -20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.3 }}
+                                transition={{ delay: 0.1 }}
                             >
                                 Here&apos;s another reason... 💫
                             </motion.p>
@@ -407,7 +490,7 @@ export default function ValentinePage({
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.8, duration: 0.5 }}
+                                transition={{ delay: 0.2, duration: 0.5 }}
                                 className="mb-6"
                             >
                                 <DotLottieReact
@@ -419,20 +502,20 @@ export default function ValentinePage({
                             </motion.div>
 
                             <motion.h2
-                                className="text-3xl md:text-4xl lg:text-5xl text-red-500 mb-4"
+                                className={`text-3xl md:text-4xl lg:text-5xl mb-4 ${styles.text}`}
                                 style={{ fontFamily: "'MGF Pinlock', cursive" }}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 1.5 }}
+                                transition={{ delay: 0.4 }}
                             >
-                                Because I see my future family with you...
+                                {why2 || "Because I see my future family with you..."}
                             </motion.h2>
 
                             <motion.p
                                 className="text-xl md:text-2xl text-gray-600 mb-8"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                transition={{ delay: 2 }}
+                                transition={{ delay: 0.6 }}
                             >
                                 You&apos;re not just my Valentine, you&apos;re my forever 💖
                             </motion.p>
@@ -440,7 +523,7 @@ export default function ValentinePage({
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                transition={{ delay: 2.5 }}
+                                transition={{ delay: 0.8 }}
                                 className="flex flex-col md:flex-row gap-4 justify-center items-center"
                             >
                                 <Button
@@ -456,7 +539,7 @@ export default function ValentinePage({
                                         setWhyClicked(false);
                                         setYesClicked(true);
                                     }}
-                                    className="bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white font-bold py-3 px-8 text-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 h-auto"
+                                    className={`${styles.btn} text-white font-bold py-3 px-8 text-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 h-auto`}
                                 >
                                     I&apos;m convinced! Yes! 💕
                                 </Button>
@@ -470,7 +553,7 @@ export default function ValentinePage({
 
     if (yesClicked) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500 overflow-hidden">
+            <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br ${styles.bg} overflow-hidden`}>
                 {/* Floating hearts background */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     {[...Array(20)].map((_, i) => (
@@ -512,7 +595,7 @@ export default function ValentinePage({
                     <Card className="relative z-10 bg-white/90 backdrop-blur-lg shadow-2xl border-0 w-full overflow-hidden">
                         <button
                             onClick={() => setYesClicked(false)}
-                            className="absolute top-6 left-6 z-20 text-gray-400 hover:text-pink-500 transition-colors p-2 rounded-full hover:bg-pink-50"
+                            className={`absolute top-6 left-6 z-20 text-gray-400 transition-colors p-2 rounded-full ${theme === 'dark' ? 'hover:bg-slate-800 hover:text-red-400' : 'hover:bg-pink-50 hover:text-pink-500'}`}
                             title="Go back"
                         >
                             <ArrowLeft size={24} />
@@ -530,11 +613,11 @@ export default function ValentinePage({
                                     className="w-40 h-40 md:w-60 md:h-60 mx-auto"
                                 />
                             </motion.div>
-                            <h1 className="text-4xl font-bold text-gray-800 mb-4">Yay! 🎉💕</h1>
+                            <h1 className="text-4xl font-bold text-gray-800 mb-4">Yay! 💕</h1>
                             <p className="text-2xl text-gray-600 mb-2">
                                 I knew you&apos;d say yes, {name}!
                             </p>
-                            <p className="text-xl text-pink-600 font-medium">
+                            <p className={`text-xl font-medium ${theme === 'dark' ? 'text-red-400' : 'text-pink-600'}`}>
                                 You just made me the happiest person ever! 💖
                             </p>
                             <div className="mt-6 flex justify-center gap-2">
@@ -563,7 +646,7 @@ export default function ValentinePage({
     return (
         <div
             ref={containerRef}
-            className="fixed inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500 overflow-hidden"
+            className={`fixed inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br ${styles.bg} overflow-hidden`}
         >
             {/* Floating hearts background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -627,16 +710,52 @@ export default function ValentinePage({
                             <Input
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                className="text-2xl md:text-3xl text-center font-bold text-red-500 h-12 border-pink-300 focus-visible:ring-pink-500 font-serif bg-white/50"
+                                className={`text-2xl md:text-3xl text-center font-bold h-12 border-pink-300 focus-visible:ring-pink-500 font-serif bg-white/50 ${styles.accent}`}
                             />
                         </div>
                     ) : (
                         <h1
-                            className="text-3xl md:text-4xl lg:text-5xl text-red-500 mb-4"
+                            className={`text-3xl md:text-4xl lg:text-5xl mb-4 ${styles.text}`}
                             style={{ fontFamily: "'MGF Pinlock', cursive" }}
                         >
                             {name}, will you be my Valentine?
                         </h1>
+                    )}
+
+                    {isEditing && (
+                        <div className="grid grid-cols-2 gap-4 mb-4 text-left">
+                            <div>
+                                <label className="text-[10px] text-pink-400 mb-1 block uppercase tracking-wider font-bold">Reason 1</label>
+                                <Input
+                                    value={why1 || ""}
+                                    onChange={(e) => setWhy1(e.target.value)}
+                                    placeholder="Blind in love..."
+                                    className="text-sm border-pink-200"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-pink-400 mb-1 block uppercase tracking-wider font-bold">Reason 2</label>
+                                <Input
+                                    value={why2 || ""}
+                                    onChange={(e) => setWhy2(e.target.value)}
+                                    placeholder="Future family..."
+                                    className="text-sm border-pink-200"
+                                />
+                            </div>
+                            <div className="col-span-2">
+                                <label className="text-[10px] text-pink-400 mb-1 block uppercase tracking-wider font-bold">Theme</label>
+                                <div className="flex gap-2">
+                                    {['pink', 'ocean', 'purple', 'dark'].map(t => (
+                                        <button
+                                            key={t}
+                                            onClick={() => setTheme(t)}
+                                            className={`w-6 h-6 rounded-full border-2 transition-all ${theme === t ? 'border-pink-600 scale-110' : 'border-transparent'} ${t === 'pink' ? 'bg-pink-400' : t === 'ocean' ? 'bg-blue-400' : t === 'purple' ? 'bg-purple-400' : 'bg-slate-900'
+                                                }`}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                     )}
 
                     {(isEditing || customMessage) && (
@@ -661,7 +780,7 @@ export default function ValentinePage({
                     <div className="flex justify-center gap-4 relative min-h-[60px]">
                         <Button
                             onClick={handleYesClick}
-                            className="bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white font-bold py-3 px-8 text-lg md:text-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 h-auto"
+                            className={`${styles.btn} text-white font-bold py-3 px-8 text-lg md:text-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 h-auto`}
                         >
                             Yes! 💖
                         </Button>
@@ -692,7 +811,7 @@ export default function ValentinePage({
                             onClick={handleWhyClick}
                             onMouseEnter={() => setIsEscaping(true)}
                             variant="secondary"
-                            className="bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-3 px-8 text-lg md:text-xl shadow-md h-auto border-2 border-pink-300"
+                            className={`${styles.secondaryBtn} font-bold py-3 px-8 text-lg md:text-xl shadow-md h-auto border-2`}
                         >
                             Why? 🤔
                         </Button>
@@ -700,7 +819,7 @@ export default function ValentinePage({
 
                     {isEscaping && (
                         <motion.p
-                            className="mt-6 text-lg text-pink-600"
+                            className={`mt-6 text-lg ${styles.accent}`}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                         >
@@ -710,5 +829,19 @@ export default function ValentinePage({
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+export default function ValentinePage(props: { params: Promise<{ name: string }> }) {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-red-400 to-rose-500">
+                <div className="animate-pulse">
+                    <Heart className="w-16 h-16 text-white" />
+                </div>
+            </div>
+        }>
+            <ValentineContent {...props} />
+        </Suspense>
     );
 }

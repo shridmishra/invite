@@ -11,6 +11,9 @@ import { eq } from "drizzle-orm"
 export async function createInvite(data: {
     recipientName: string;
     message?: string;
+    reason1?: string;
+    reason2?: string;
+    theme?: string;
     slug?: string;
 }) {
     const session = await auth.api.getSession({
@@ -33,6 +36,9 @@ export async function createInvite(data: {
         slug: slug,
         recipientName: data.recipientName,
         message: data.message,
+        reason1: data.reason1,
+        reason2: data.reason2,
+        theme: data.theme || "pink",
     })
 
     return { success: true, id, slug }
@@ -46,6 +52,9 @@ export async function getInvite(slug: string) {
 export async function updateInvite(id: string, data: {
     recipientName: string;
     message?: string;
+    reason1?: string;
+    reason2?: string;
+    theme?: string;
 }) {
     const session = await auth.api.getSession({
         headers: await headers()
@@ -69,9 +78,29 @@ export async function updateInvite(id: string, data: {
         .set({
             recipientName: data.recipientName,
             message: data.message,
+            reason1: data.reason1,
+            reason2: data.reason2,
+            theme: data.theme,
             updatedAt: new Date(),
         })
         .where(eq(invite.id, id));
 
     return { success: true }
+}
+
+export async function getUserInvites() {
+    const session = await auth.api.getSession({
+        headers: await headers()
+    })
+
+    if (!session?.user) {
+        return []
+    }
+
+    return await db.select().from(invite).where(eq(invite.userId, session.user.id))
+}
+
+export async function getInviteById(id: string) {
+    const result = await db.select().from(invite).where(eq(invite.id, id))
+    return result[0] || null
 }

@@ -1,32 +1,35 @@
 "use client"
 
 import { useSession } from "@/lib/auth-client"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Sparkles, Copy, Check, ExternalLink, Heart, Send } from "lucide-react"
-import { motion, AnimatePresence } from "motion/react"
-import { createInvite } from "@/app/actions"
-import { Suspense } from "react"
+import { Loader2, Sparkles, Copy, Check, ExternalLink, ArrowLeft, Heart, Save } from "lucide-react"
+import { motion } from "motion/react"
+import { updateInvite, getInviteById } from "@/app/actions"
 
-function CreateInviteForm() {
+
+export default function EditInvitePage() {
     const { data: session, isPending } = useSession()
     const router = useRouter()
-    const searchParams = useSearchParams()
+    const params = useParams()
+    const id = params.id as string
 
     const [recipientName, setRecipientName] = useState("")
     const [message, setMessage] = useState("")
     const [reason1, setReason1] = useState("")
     const [reason2, setReason2] = useState("")
     const [theme, setTheme] = useState("pink")
-    const [isSubmitting, setIsSubmitting] = useState(false)
-    const [createdSlug, setCreatedSlug] = useState<string | null>(null)
-    const [copied, setCopied] = useState(false)
+    const [slug, setSlug] = useState("")
 
+    const [isFetching, setIsFetching] = useState(true)
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [isSaved, setIsSaved] = useState(false)
+    const [copied, setCopied] = useState(false)
 
     useEffect(() => {
         if (!isPending && !session) {
@@ -35,79 +38,60 @@ function CreateInviteForm() {
     }, [session, isPending, router])
 
     useEffect(() => {
-        const nameParam = searchParams.get("name")
-        if (nameParam) {
-            setRecipientName(nameParam)
+        const fetchInvite = async () => {
+            if (!id) return
+            try {
+                const data = await getInviteById(id)
+                if (data) {
+                    if (session?.user && data.userId !== session.user.id) {
+                        router.push("/")
+                        return
+                    }
+                    setRecipientName(data.recipientName)
+                    setMessage(data.message || "")
+                    setReason1(data.reason1 || "")
+                    setReason2(data.reason2 || "")
+                    setTheme(data.theme || "pink")
+                    setSlug(data.slug || data.id)
+                }
+            } catch (error) {
+                console.error(error)
+            } finally {
+                setIsFetching(false)
+            }
         }
-    }, [searchParams])
+        if (session) fetchInvite()
+    }, [id, session, router])
 
     const handleSubmit = async () => {
         if (!recipientName.trim()) return;
         setIsSubmitting(true);
         try {
-            const result = await createInvite({
+            const result = await updateInvite(id, {
                 recipientName,
                 message,
                 reason1,
                 reason2,
                 theme
             })
-            if (result.success && result.slug) {
-                setCreatedSlug(result.slug)
+            if (result.success) {
+                setIsSaved(true)
+                setTimeout(() => setIsSaved(false), 3000)
             }
         } catch (error) {
             console.error(error)
-            alert("Failed to create invite. Please try again.")
+            alert("Failed to update invite. Please try again.")
         } finally {
             setIsSubmitting(false)
         }
     }
 
-    const generatedUrl = createdSlug ? `https://invitely.shrid.in/valentine/${createdSlug}` : "";
+    const generatedUrl = slug ? `${typeof window !== 'undefined' ? window.location.origin : ''}/valentine/${slug}` : "";
 
-    if (isPending || !session) {
+    if (isPending || isFetching) {
         return (
             <div className="flex h-[50vh] w-full items-center justify-center">
                 <Loader2 className="animate-spin text-pink-500" size={32} />
-            </div>
-        )
-    }
-
-    if (createdSlug) {
-        return (
-            <div className="container py-12 max-w-2xl">
-                <Card className="border-pink-200 shadow-xl overflow-hidden">
-                    <div className="h-32 bg-gradient-to-r from-pink-400 to-rose-500 flex items-center justify-center">
-                        <Sparkles className="text-white h-12 w-12" />
-                    </div>
-                    <CardHeader className="text-center">
-                        <CardTitle className="text-3xl font-serif text-pink-700">Invite Created!</CardTitle>
-                        <CardDescription className="text-lg">
-                            Your Valentine invite for <span className="font-semibold text-pink-600">{recipientName}</span> is ready.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="p-4 bg-pink-50 rounded-lg border border-pink-100 flex flex-col gap-2">
-                            <Label className="text-pink-600 font-medium">Share this link</Label>
-                            <div className="flex gap-2">
-                                <Input value={generatedUrl} readOnly className="bg-white" />
-                                <Button size="icon" variant="outline" onClick={() => {
-                                    navigator.clipboard.writeText(generatedUrl)
-                                    setCopied(true)
-                                    setTimeout(() => setCopied(false), 2000)
-                                }}>
-                                    {copied ? <Check size={18} className="text-green-600" /> : <Copy size={18} />}
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="flex justify-center gap-4">
-                            <Button variant="outline" onClick={() => setCreatedSlug(null)}>Create Another</Button>
-                            <Button className="bg-pink-600 hover:bg-pink-700" onClick={() => window.open(generatedUrl.replace("https://invitely.shrid.in", window.location.origin), "_blank")}>
-                                Open Invite <ExternalLink className="ml-2 h-4 w-4" />
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
         )
     }
@@ -116,30 +100,28 @@ function CreateInviteForm() {
         <div className="min-h-screen bg-slate-50/50 pb-20">
             {/* Background Decorations */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-pink-100/50 blur-[120px]" />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-100/50 blur-[120px]" />
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-pink-100/30 blur-[120px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-100/30 blur-[120px]" />
             </div>
 
             <div className="container py-12 max-w-6xl">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-10 text-center"
-                >
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-100 text-pink-700 text-xs font-bold uppercase tracking-wider mb-4">
-                        <Heart className="w-3 h-3 fill-current" />
-                        Invitation Designer
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Button>
+                        <div>
+                            <h1 className="text-3xl font-serif text-slate-900 tracking-tight">Customize Invitation</h1>
+                            <p className="text-slate-500">Fine-tune your message to perfection.</p>
+                        </div>
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-serif text-slate-900 mb-3 tracking-tight">Create Your Magic Message</h1>
-                    <p className="text-slate-500 text-lg max-w-2xl mx-auto">Design a personalized, interactive invitation that will make them fall in love all over again.</p>
-                </motion.div>
+                </div>
 
                 <div className="grid lg:grid-cols-12 gap-10 items-start">
                     {/* Form Section */}
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 }}
                         className="lg:col-span-7 space-y-8"
                     >
                         <Card className="border-0 shadow-2xl shadow-slate-200/50 overflow-hidden bg-white/80 backdrop-blur-xl">
@@ -148,12 +130,11 @@ function CreateInviteForm() {
                                     <Sparkles className="w-5 h-5 text-pink-500" />
                                     Invitation Details
                                 </CardTitle>
-                                <CardDescription>Tell us about your special someone and your message.</CardDescription>
                             </CardHeader>
                             <CardContent className="p-6 space-y-6">
                                 <div className="grid md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <Label htmlFor="name" className="text-sm font-semibold uppercase tracking-wider text-slate-500">Partner's Name</Label>
+                                        <Label htmlFor="name" className="text-sm font-semibold uppercase tracking-wider text-slate-500">Recipient Name</Label>
                                         <Input
                                             id="name"
                                             placeholder="e.g. Shreya"
@@ -163,7 +144,7 @@ function CreateInviteForm() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-sm font-semibold uppercase tracking-wider text-slate-500">Select Style</Label>
+                                        <Label className="text-sm font-semibold uppercase tracking-wider text-slate-500">Card Style</Label>
                                         <div className="flex gap-3">
                                             {[
                                                 { id: "pink", class: "bg-pink-500" },
@@ -183,13 +164,10 @@ function CreateInviteForm() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="message" className="text-sm font-semibold uppercase tracking-wider text-slate-500 flex justify-between">
-                                        Love Note
-                                        <span className="text-[10px] font-normal italic">Appears on the front of the card</span>
-                                    </Label>
+                                    <Label htmlFor="message" className="text-sm font-semibold uppercase tracking-wider text-slate-500">Personal Love Note</Label>
                                     <Textarea
                                         id="message"
-                                        placeholder="Will you be my Valentine? (or write something custom...)"
+                                        placeholder="Add a sweet note that will appear on the card..."
                                         className="min-h-[100px] border-slate-200 focus:border-pink-500 focus:ring-pink-500 rounded-xl bg-white/50"
                                         value={message}
                                         onChange={(e) => setMessage(e.target.value)}
@@ -198,7 +176,7 @@ function CreateInviteForm() {
 
                                 <div className="grid md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <Label htmlFor="reason1" className="text-sm font-semibold uppercase tracking-wider text-slate-500">Reason #1 (Why?)</Label>
+                                        <Label htmlFor="reason1" className="text-sm font-semibold uppercase tracking-wider text-slate-500">Reason 1 (Why?)</Label>
                                         <Input
                                             id="reason1"
                                             placeholder="Because I'm blind in your love..."
@@ -208,10 +186,10 @@ function CreateInviteForm() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="reason2" className="text-sm font-semibold uppercase tracking-wider text-slate-500">Reason #2 (More?)</Label>
+                                        <Label htmlFor="reason2" className="text-sm font-semibold uppercase tracking-wider text-slate-500">Reason 2 (Family)</Label>
                                         <Input
                                             id="reason2"
-                                            placeholder="Because I see my future with you..."
+                                            placeholder="Because I see my future family with you..."
                                             value={reason2}
                                             onChange={(e) => setReason2(e.target.value)}
                                             className="h-12 border-slate-200 focus:border-pink-500 focus:ring-pink-500 rounded-xl bg-white/50"
@@ -220,18 +198,39 @@ function CreateInviteForm() {
                                 </div>
                             </CardContent>
                             <CardFooter className="bg-slate-50/80 p-6 flex justify-between items-center border-t">
-                                <div className="text-xs text-slate-400 italic">
-                                    * These can be changed anytime later
-                                </div>
+                                <Button variant="outline" onClick={() => window.open(generatedUrl, "_blank")} className="rounded-xl border-slate-300">
+                                    <ExternalLink className="mr-2 h-4 w-4" /> View Live
+                                </Button>
                                 <Button
                                     onClick={handleSubmit}
                                     disabled={!recipientName.trim() || isSubmitting}
-                                    className="bg-pink-600 hover:bg-pink-700 text-white px-8 h-12 rounded-xl font-bold shadow-lg shadow-pink-200 hover:-translate-y-0.5 transition-all group"
+                                    className="bg-pink-600 hover:bg-pink-700 text-white min-w-[160px] h-12 rounded-xl font-bold shadow-lg shadow-pink-200 hover:-translate-y-0.5 transition-all"
                                 >
-                                    {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Send className="mr-2 h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
-                                    {isSubmitting ? "Creating..." : "Create Magic Invite"}
+                                    {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : isSaved ? <Check className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
+                                    {isSubmitting ? "Saving..." : isSaved ? "Changes Saved!" : "Save Changes"}
                                 </Button>
                             </CardFooter>
+                        </Card>
+
+                        <Card className="border-0 shadow-xl shadow-pink-100/50 bg-gradient-to-br from-pink-50 to-white overflow-hidden">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-lg text-pink-900">Share Your Invite</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pb-6">
+                                <div className="flex gap-2 p-1 rounded-2xl bg-white shadow-inner border">
+                                    <Input value={generatedUrl} readOnly className="border-0 bg-transparent focus-visible:ring-0 h-11" />
+                                    <Button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(generatedUrl)
+                                            setCopied(true)
+                                            setTimeout(() => setCopied(false), 2000)
+                                        }}
+                                        className={`${copied ? 'bg-green-500' : 'bg-slate-900'} hover:opacity-90 rounded-xl px-6 transition-all`}
+                                    >
+                                        {copied ? <Check size={18} /> : "Copy Link"}
+                                    </Button>
+                                </div>
+                            </CardContent>
                         </Card>
                     </motion.div>
 
@@ -239,7 +238,7 @@ function CreateInviteForm() {
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.2 }}
+                        transition={{ delay: 0.1 }}
                         className="lg:col-span-5 lg:sticky lg:top-12 flex flex-col items-center"
                     >
                         <div className="w-full max-w-[340px] relative">
@@ -281,34 +280,19 @@ function CreateInviteForm() {
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* Floating Elements */}
                                 <div className="absolute top-10 left-10 w-4 h-4 bg-white/20 rounded-full blur-sm animate-pulse" />
                                 <div className="absolute bottom-20 right-10 w-8 h-8 bg-white/10 rounded-full blur-md animate-bounce" />
                             </div>
                         </div>
-
                         <div className="mt-8 text-center">
                             <span className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                Real-time Live Preview
+                                Live Preview
                             </span>
                         </div>
                     </motion.div>
                 </div>
             </div>
         </div>
-    )
-}
-
-export default function CreateInvitePage() {
-    return (
-        <Suspense fallback={
-            <div className="flex h-[50vh] w-full items-center justify-center">
-                <Loader2 className="animate-spin text-pink-500" size={32} />
-            </div>
-        }>
-            <CreateInviteForm />
-        </Suspense>
     )
 }

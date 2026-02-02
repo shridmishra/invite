@@ -42,8 +42,8 @@ export function PersonalizationModal({
 
     const handleCustomize = () => {
         if (name.trim()) {
-            // Navigate to the valentine page with edit mode enabled
-            router.push(`/valentine/${encodeURIComponent(name)}?edit=true`)
+            // Navigate to the dedicated creation page
+            router.push(`/valentine/create?name=${encodeURIComponent(name)}`)
         }
     }
 
@@ -94,14 +94,14 @@ export function PersonalizationModal({
                                 onClick={handleCustomize}
                                 disabled={!name.trim()}
                                 variant="outline"
-                                className="flex-1 w-full sm:w-auto border-pink-200 text-pink-700 hover:bg-pink-50 hover:text-pink-800"
+                                className="flex-1 w-full sm:w-auto"
                             >
                                 <span className="mr-2">✨</span> Customize More
                             </Button>
                             <Button
                                 onClick={handleCreate}
                                 disabled={!name.trim()}
-                                className="bg-pink-600 hover:bg-pink-700 flex-1 w-full sm:w-auto"
+                                className="flex-1 w-full sm:w-auto"
                             >
                                 Generate Link
                             </Button>
@@ -120,7 +120,7 @@ export function PersonalizationModal({
                                 <Input
                                     readOnly
                                     value={productionUrl}
-                                    className="pr-10 bg-slate-50"
+                                    className="pr-10 bg-muted"
                                 />
                                 <Button
                                     size="icon"
@@ -141,7 +141,7 @@ export function PersonalizationModal({
                                 {copied ? "Copied!" : "Copy Link"}
                             </Button>
                             <Button
-                                className="flex-1 bg-pink-600 hover:bg-pink-700"
+                                className="flex-1"
                                 onClick={() => window.open(localUrl, "_blank")}
                             >
                                 Open (Local)
